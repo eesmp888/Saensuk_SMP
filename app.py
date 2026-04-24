@@ -5,198 +5,92 @@ import hmac
 import base64
 import requests
 from flask import Flask, request, abort
-from groq import Groq
 
 app = Flask(__name__)
 
-# ─── Config ───────────────────────────────────────────────────────────────────
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-groq_client = Groq(api_key=GROQ_API_KEY)
-
-# ─── Knowledge Base (จากไฟล์ที่ให้มา) ────────────────────────────────────────
 KNOWLEDGE_BASE = """
-คุณคือ "น้องแสนสุข" ผู้ช่วย AI ของโครงการจ้างเหมาเอกชนบริหารจัดการระบบบำบัดน้ำเสียรวม เทศบาลเมืองแสนสุข จังหวัดชลบุรี
+คุณคือ "น้องแสนสุข" ผู้ช่วย AI ของโครงการบำบัดน้ำเสียรวม เทศบาลเมืองแสนสุข จังหวัดชลบุรี
 
 === ข้อมูลโครงการ ===
 ชื่อโครงการ: โครงการจ้างเหมาเอกชนบริหารจัดการระบบบำบัดน้ำเสียรวม เทศบาลเมืองแสนสุข จังหวัดชลบุรี
 สัญญาเลขที่: 1/2569 ลงวันที่ 30 กันยายน 2568
-วันเริ่มสัญญา: 1 ตุลาคม 2568
-วันสิ้นสุดสัญญา: 30 กันยายน 2569
-ระยะเวลาดำเนินการ: 12 เดือน
-ผู้รับจ้าง: บริษัท เจม เอ็นไวรันเมนทัล แมเนจเม้นท์ จำกัด (GEM Environmental Management Co.,Ltd.)
+วันเริ่มสัญญา: 1 ตุลาคม 2568 / วันสิ้นสุดสัญญา: 30 กันยายน 2569
+ผู้รับจ้าง: บริษัท เจม เอ็นไวรันเมนทัล แมเนจเม้นท์ จำกัด
 มูลค่างาน: 2,615,500 บาท (รวมภาษีมูลค่าเพิ่ม)
 
 === คณะกรรมการตรวจรับพัสดุ ===
-1. นายชัชวาล กอหญ้ากลาง – หัวหน้าฝ่ายจัดการคุณภาพน้ำ (ประธานตรวจรับพัสดุ)
-2. นางสาวเพ็ญศรี ชายชาญณรงค์ – นักวิชาการสุขาภิบาล (กรรมการตรวจรับพัสดุ)
-3. นายณรงค์ศักดิ์ กลิ่นขจร – ผู้ช่วยนายช่างไฟฟ้า (กรรมการตรวจรับพัสดุ)
+1. นายชัชวาล กอหญ้ากลาง - ประธาน
+2. นางสาวเพ็ญศรี ชายชาญณรงค์ - กรรมการ
+3. นายณรงค์ศักดิ์ กลิ่นขจร - กรรมการ
 
-=== โครงสร้างอัตรากำลัง ===
-1. ผู้จัดการโครงการ: 1 อัตรา
-2. วิศวกรโครงการ (โยธา): 1 อัตรา
-3. นักวิชาการสุขาภิบาล: 1 อัตรา
-4. นายช่างไฟฟ้า: 2 อัตรา
-5. นายช่างเครื่องกล: 1 อัตรา
-6. พนักงานปฏิบัติการ: 1 อัตรา
-รวมทั้งสิ้น 7 อัตรา
+=== รายงานผลการดำเนินการ มีนาคม 2569 (งวดที่ 6) ===
+ปริมาณน้ำเสียรวมเข้าระบบ: 467,240 ลบ.ม. (เหนือ 258,120 / ใต้ 209,138)
+ปริมาณการใช้ไฟฟ้า: 69,000 กิโลวัตต์ชั่วโมง
+ปริมาณน้ำประปา: 466.85 ลบ.ม.
+น้ำรดต้นไม้: 4,573 ลบ.ม. (459 เที่ยว)
 
-ตารางทำงาน:
-- วันจันทร์–ศุกร์: เข้า 7 อัตรา
-- วันเสาร์: เข้า 6 อัตรา
-- วันอาทิตย์และวันหยุดนักขัตฤกษ์: เข้า 3 อัตรา (วิศวกร 1 / นายช่างไฟฟ้า 1 / ช่างเครื่องกลหรือพนักงานทั่วไป 1)
+=== คุณภาพน้ำ มีนาคม 2569 ===
+แสนสุขเหนือ: pH 6.66/6.55, อุณหภูมิ 27.25/27.55C, DO 2.05/3.81 mg/L (ผ่านมาตรฐาน)
+แสนสุขใต้: pH 7.15/7.14, อุณหภูมิ 29.16/28.35C, DO 2.91/4.15 mg/L (ผ่านมาตรฐาน)
 
-=== รายงานผลการดำเนินการ เดือน มีนาคม 2569 (งวดที่ 6) ===
-1. ปริมาณน้ำเสียรวมเข้าระบบ: 467,240 ลบ.ม.
-   - แสนสุขเหนือ: 258,120 ลบ.ม.
-   - แสนสุขใต้: 209,138 ลบ.ม.
-2. ปริมาณน้ำทิ้งที่ออกจากระบบ: 467,240 ลบ.ม.
-3. ปริมาณการใช้น้ำรดน้ำต้นไม้และอื่นๆ: 4,573 ลบ.ม. (459 เที่ยว)
-4. ปริมาณการใช้ไฟฟ้า: 69,000 กิโลวัตต์ชั่วโมง
-   - แสนสุขเหนือ: 53,400 (มิเตอร์ไฟฟ้าชำรุด)
-   - แสนสุขใต้: 15,600 กิโลวัตต์ชั่วโมง
-5. ปริมาณการใช้น้ำประปา: 466.85 ลบ.ม.
-   - แสนสุขเหนือ: 218.48 ลบ.ม.
-   - แสนสุขใต้: 248.37 ลบ.ม.
+=== ประสิทธิภาพบำบัด ===
+แสนสุขเหนือ: BOD 45%, TSS 49%, Oil&Grease 75%
+แสนสุขใต้: BOD 49%, TSS 34%, Oil&Grease 90%
+หมายเหตุ: แสนสุขใต้ BOD/TSS ไม่ผ่านมาตรฐาน เนื่องจาก Sludge Bulking และถัง Clarifier ชำรุด
 
-=== แนวโน้มปริมาณน้ำ ===
-- แสนสุขเหนือ: ลดลง 13.71% เมื่อเทียบกับสัญญาที่ 2, น้อยกว่าเดือนกุมภาพันธ์ 16.64%
-- แสนสุขใต้: เพิ่มขึ้น 81% เมื่อเทียบกับสัญญาที่ 2, น้อยกว่าเดือนกุมภาพันธ์ 22%
-- น้ำรียูส (แสนสุขเหนือ): ลดลง 25% เมื่อเทียบกับสัญญาที่ 2, น้อยกว่าเดือนมกราคม 7%
+=== สถานะเครื่องจักร ===
+แสนสุขเหนือ: 117 รายการ ใช้งานได้ 30 รายการ
+แสนสุขใต้: 92 รายการ ใช้งานได้ 19 รายการ
+งานบำรุงรักษา: เหนือ 54 งาน / ใต้ 42 งาน
 
-=== คุณภาพน้ำเฉลี่ยรายวัน เดือน มีนาคม 2569 ===
-ค่าควบคุม:
-- pH: 5.5-8
-- อุณหภูมิ: น้อยกว่า 40 องศาเซลเซียส
-- DO: มากกว่า 2 mg/L
-
-แสนสุขเหนือ:
-- pH: Influent 6.66, Effluent 6.55 (ผ่านมาตรฐาน)
-- อุณหภูมิ: Influent 27.25°C, Effluent 27.55°C (ผ่านมาตรฐาน)
-- DO: Influent 2.05 mg/L, Effluent 3.81 mg/L (ผ่านมาตรฐาน)
-
-แสนสุขใต้:
-- pH: Influent 7.15, Effluent 7.14 (ผ่านมาตรฐาน)
-- อุณหภูมิ: Influent 29.16°C, Effluent 28.35°C (ผ่านมาตรฐาน)
-- DO: Influent 2.91 mg/L, Effluent 4.15 mg/L (ผ่านมาตรฐาน)
-
-=== ประสิทธิภาพในการบำบัด เดือน มีนาคม 2569 ===
-โรงปรับปรุงคุณภาพน้ำแสนสุขเหนือ (ค่าเฉลี่ย):
-- BOD: 45%
-- TSS: 49%
-- Oil&Grease: 75%
-- Total Nitrogen: 8%
-- Total Phosphorus: 4%
-
-โรงปรับปรุงคุณภาพน้ำแสนสุขใต้ (ค่าเฉลี่ย):
-- BOD: 49%
-- TSS: 34%
-- Oil&Grease: 90%
-- Total Nitrogen: 16%
-- Total Phosphorus: 7%
-
-หมายเหตุ: แสนสุขใต้ – ค่า BOD และ TSS ไม่ผ่านมาตรฐานน้ำทิ้ง เนื่องจากตะกอนไม่จม (Sludge Bulking)
-ถังตกตะกอน (Clarifier) ชำรุด จุลินทรีย์หลุดออกไปพร้อมน้ำทิ้ง ทำให้ค่า BOD สูง
-
-=== สถานะเครื่องจักร เดือน มีนาคม 2569 ===
-แสนสุขเหนือ: ทรัพย์สินทั้งหมด 117 รายการ, ใช้งานได้ปกติ 30 รายการ
-แสนสุขใต้: ทรัพย์สินทั้งหมด 92 รายการ, ใช้งานได้ปกติ 19 รายการ
-
-=== งานซ่อมบำรุง ===
-แสนสุขเหนือ: งานบำรุงรักษา 54 งาน, งานซ่อมแซม 0 งาน
-แสนสุขใต้: งานบำรุงรักษา 42 งาน, งานซ่อมแซม 0 งาน
-งานคงค้าง 2 งาน:
-1. ปั้มระบายน้ำฝน No.1 – มอเตอร์ใช้งานได้แต่ฐานปากแตรชำรุด มีสนิมหลุดจมในบ่อ
-2. ปั๊มสูบระบายน้ำฝน No.3 – สายไฟเมนพันกันจนเกิดความร้อนสูง กระแสไฟฟ้าเกินพิกัด ปั๊มหยุดทำงาน (Trip) เมื่อ 10/9/68
-
-=== สรุปค่าจ้างเบิก งวดที่ 6 (1–31 มีนาคม 2569) ===
-- ค่าจ้างเบิก: 203,621.50 บาท
-- ภาษีมูลค่าเพิ่ม 7%: 14,253.50 บาท
-- รวมค่าจ้างเบิกทั้งสิ้น: 217,875.00 บาท
-
-=== เรื่องเพื่อติดตาม ===
-1. อุปกรณ์ชุดควบคุมไฟฟ้า เครื่องเติมอากาศ Jet Aerator (แสนสุขเหนือและใต้)
-   - ส่งหนังสือแจ้งเทศบาล 26 พ.ย. 68
-   - อยู่ระหว่างการจัดซื้อ (จัดส่งบางส่วนแล้ว)
-2. อุปกรณ์ชุดควบคุมไฟฟ้า Waste Water Pump No.2 (แสนสุขเหนือ)
-   - ส่งหนังสือแจ้งเทศบาล 26 พ.ย. 68
-   - เทศบาลจัดส่งอุปกรณ์แล้ว 10 มี.ค. 69
-   - ดำเนินการซ่อมชุดควบคุม 4 ชุด อยู่ระหว่างทดสอบก่อนติดตั้ง
+=== ค่าจ้างงวดที่ 6 ===
+ค่าจ้าง: 203,621.50 บาท + VAT 7% = รวม 217,875.00 บาท
 """
 
-# ─── LINE Signature Verification ─────────────────────────────────────────────
-def verify_signature(body: bytes, signature: str) -> bool:
-    hash_val = hmac.new(
-        LINE_CHANNEL_SECRET.encode("utf-8"), body, hashlib.sha256
-    ).digest()
-    return hmac.compare_digest(
-        base64.b64encode(hash_val).decode("utf-8"), signature
+def verify_signature(body, signature):
+    hash_val = hmac.new(LINE_CHANNEL_SECRET.encode("utf-8"), body, hashlib.sha256).digest()
+    return hmac.compare_digest(base64.b64encode(hash_val).decode("utf-8"), signature)
+
+def reply_message(reply_token, text):
+    requests.post(
+        "https://api.line.me/v2/bot/message/reply",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"},
+        json={"replyToken": reply_token, "messages": [{"type": "text", "text": text}]}
     )
 
-# ─── Reply to LINE ────────────────────────────────────────────────────────────
-def reply_message(reply_token: str, text: str):
-    url = "https://api.line.me/v2/bot/message/reply"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
-    }
-    payload = {
-        "replyToken": reply_token,
-        "messages": [{"type": "text", "text": text}],
-    }
-    requests.post(url, headers=headers, json=payload)
-
-# ─── Ask Groq ─────────────────────────────────────────────────────────────────
-def ask_groq(user_message: str) -> str:
+def ask_groq(user_message):
     try:
-        response = groq_client.chat.completions.create(
-            model="llama3-70b-8192",
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"""คุณคือ "น้องแสนสุข" ผู้ช่วย AI สำหรับโครงการบำบัดน้ำเสียเทศบาลเมืองแสนสุข
-ตอบคำถามเป็นภาษาไทย กระชับ เข้าใจง่าย และเป็นมิตร
-ใช้ข้อมูลจาก Knowledge Base ด้านล่างในการตอบ
-ถ้าไม่มีข้อมูลในเรื่องนั้น ให้บอกว่าไม่มีข้อมูล และแนะนำให้ติดต่อเจ้าหน้าที่โดยตรง
-
-=== Knowledge Base ===
-{KNOWLEDGE_BASE}
-""",
-                },
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.3,
-            max_tokens=800,
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": "llama3-70b-8192",
+                "messages": [
+                    {"role": "system", "content": f'คุณคือ "น้องแสนสุข" ผู้ช่วย AI ตอบเป็นภาษาไทย กระชับ เป็นมิตร ใช้ข้อมูลนี้ตอบ:\n{KNOWLEDGE_BASE}'},
+                    {"role": "user", "content": user_message}
+                ],
+                "temperature": 0.3,
+                "max_tokens": 800
+            },
+            timeout=30
         )
-        return response.choices[0].message.content.strip()
+        return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        return f"ขออภัยค่ะ เกิดข้อผิดพลาด: {str(e)}\nกรุณาลองใหม่อีกครั้งนะคะ 🙏"
+        return f"ขออภัยค่ะ เกิดข้อผิดพลาด กรุณาลองใหม่นะคะ"
 
-# ─── Webhook ──────────────────────────────────────────────────────────────────
 @app.route("/webhook", methods=["POST"])
 def webhook():
     signature = request.headers.get("X-Line-Signature", "")
     body = request.get_data()
-
     if not verify_signature(body, signature):
-        abort(400, "Invalid signature")
-
-    data = json.loads(body.decode("utf-8"))
-
-    for event in data.get("events", []):
-        if event.get("type") != "message":
-            continue
-        if event["message"].get("type") != "text":
-            continue
-
-        user_text = event["message"]["text"]
-        reply_token = event["replyToken"]
-
-        answer = ask_groq(user_text)
-        reply_message(reply_token, answer)
-
+        abort(400)
+    for event in json.loads(body).get("events", []):
+        if event.get("type") == "message" and event["message"].get("type") == "text":
+            reply_message(event["replyToken"], ask_groq(event["message"]["text"]))
     return "OK", 200
 
 @app.route("/", methods=["GET"])
@@ -204,5 +98,4 @@ def health():
     return "น้องแสนสุข Bot is running! 🌊", 200
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
