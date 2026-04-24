@@ -68,19 +68,50 @@ def ask_groq(user_message):
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
             json={
-                "model": "llama-3.1-8b-instant",
+                "model": "llama3-70b-8192",
                 "messages": [
                     {"role": "system", "content": f'คุณคือ "น้องแสนสุข" ผู้ช่วย AI ตอบเป็นภาษาไทย กระชับ เป็นมิตร ใช้ข้อมูลนี้ตอบ:\n{KNOWLEDGE_BASE}'},
                     {"role": "user", "content": user_message}
                 ],
                 "temperature": 0.3,
-                "max_tokens": 500
+                "max_tokens": 800
             },
             timeout=30
         )
         return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         return f"ขออภัยค่ะ เกิดข้อผิดพลาด กรุณาลองใหม่นะคะ"
+
+TRIGGER_WORDS = ["น้องแสนสุข", "แสนสุข"]
+
+def should_reply(event):
+    source_type = event.get("source", {}).get("type", "user")
+    text = event["message"]["text"]
+
+    # LINE Official (user) → ตอบทุกข้อความ
+    if source_type == "user":
+        return True
+
+    # กลุ่ม หรือ ห้อง → ตอบเฉพาะเมื่อมี trigger word หรือถูก mention
+    if source_type in ["group", "room"]:
+        # เช็ค mention (@น้องแสนสุข)
+        mention = event["message"].get("mention", {})
+        if mention.get("mentionees"):
+            return True
+        # เช็ค trigger word
+        for word in TRIGGER_WORDS:
+            if word in text:
+                return True
+        return False
+
+    return True
+
+def clean_text(event):
+    text = event["message"]["text"]
+    # ตัด trigger word ออกก่อนส่งให้ AI
+    for word in TRIGGER_WORDS:
+        text = text.replace(word, "").strip()
+    return text if text else event["message"]["text"]
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -90,7 +121,8 @@ def webhook():
         abort(400)
     for event in json.loads(body).get("events", []):
         if event.get("type") == "message" and event["message"].get("type") == "text":
-            reply_message(event["replyToken"], ask_groq(event["message"]["text"]))
+            if should_reply(event):
+                reply_message(event["replyToken"], ask_groq(clean_text(event)))
     return "OK", 200
 
 @app.route("/", methods=["GET"])
