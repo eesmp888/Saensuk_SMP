@@ -110,8 +110,8 @@ def ask_groq(user_message):
     try:
         kb = get_knowledge()
         # จำกัด knowledge ไม่เกิน 6000 ตัวอักษร
-        if len(kb) > 6000:
-            kb = kb[:6000] + "\n...(ข้อมูลถูกตัดบางส่วน)"
+        if len(kb) > 3000:
+            kb = kb[:3000] + "\n...(ข้อมูลถูกตัดบางส่วน)"
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
