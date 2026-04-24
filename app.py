@@ -80,7 +80,7 @@ def ask_groq(user_message):
         )
         return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        return f"ขออภัยค่ะ เกิดข้อผิดพลาด กรุณาลองใหม่นะคะ"
+        return f"Error: {str(e)}"
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
