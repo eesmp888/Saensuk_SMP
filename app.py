@@ -68,13 +68,13 @@ def ask_groq(user_message):
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
             json={
-                "model": "llama3-70b-8192",
+                "model": "llama-3.1-8b-instant",
                 "messages": [
                     {"role": "system", "content": f'คุณคือ "น้องแสนสุข" ผู้ช่วย AI ตอบเป็นภาษาไทย กระชับ เป็นมิตร ใช้ข้อมูลนี้ตอบ:\n{KNOWLEDGE_BASE}'},
                     {"role": "user", "content": user_message}
                 ],
                 "temperature": 0.3,
-                "max_tokens": 800
+                "max_tokens": 500
             },
             timeout=30
         )
