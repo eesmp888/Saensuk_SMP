@@ -12,7 +12,57 @@ LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-KNOWLEDGE_BASE = """
+# ─── อ่านข้อมูลจากไฟล์ใน /data ────────────────────────────────────────────
+def load_data_files():
+    text = ""
+    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    if not os.path.exists(data_dir):
+        return ""
+    for filename in os.listdir(data_dir):
+        filepath = os.path.join(data_dir, filename)
+        try:
+            if filename.endswith(".pptx"):
+                from pptx import Presentation
+                prs = Presentation(filepath)
+                text += f"\n=== ข้อมูลจาก {filename} ===\n"
+                for i, slide in enumerate(prs.slides, 1):
+                    slide_text = ""
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            slide_text += shape.text.strip() + "\n"
+                    if slide_text:
+                        text += f"[Slide {i}]\n{slide_text}\n"
+            elif filename.endswith((".xlsx", ".xls")):
+                import openpyxl
+                wb = openpyxl.load_workbook(filepath, read_only=True)
+                text += f"\n=== ข้อมูลจาก {filename} ===\n"
+                for sheet in wb.sheetnames:
+                    ws = wb[sheet]
+                    text += f"[Sheet: {sheet}]\n"
+                    for row in ws.iter_rows(values_only=True):
+                        row_text = "\t".join([str(c) if c is not None else "" for c in row])
+                        if row_text.strip():
+                            text += row_text + "\n"
+            elif filename.endswith(".docx"):
+                from docx import Document
+                doc = Document(filepath)
+                text += f"\n=== ข้อมูลจาก {filename} ===\n"
+                for para in doc.paragraphs:
+                    if para.text.strip():
+                        text += para.text + "\n"
+            elif filename.endswith(".txt"):
+                with open(filepath, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content and content != "data folder":
+                        text += f"\n=== ข้อมูลจาก {filename} ===\n{content}\n"
+        except Exception as e:
+            print(f"Error reading {filename}: {e}")
+    return text
+
+# โหลดข้อมูลตอน startup
+FILE_DATA = load_data_files()
+
+STATIC_KNOWLEDGE = """
 === ข้อมูลโครงการ ===
 ชื่อโครงการ: โครงการจ้างเหมาเอกชนบริหารจัดการระบบบำบัดน้ำเสียรวม เทศบาลเมืองแสนสุข จังหวัดชลบุรี
 สัญญาเลขที่: 1/2569 ลงวันที่ 30 กันยายน 2568
@@ -37,27 +87,13 @@ BOD เหนือ 45% / ใต้ 49% (ใต้ไม่ผ่านมาต
 - โรงเหนือ: Pump No.3 ปกติ / No.1,4 ชำรุดถาวร / No.2 ปั๊มปกติตู้ชำรุด
 - Aerator ปกติ: No.2,3,7,9,12,14 / ชำรุด: No.1,4,5,6,8,10,11,13,15,16
 - Clarifier No.1,2,8,9: ชำรุด
-- หม้อแปลง 1,000 kVA: น้ำมันรั่ว
-
 แสนสุขใต้ (92 รายการ):
-- หาดวอนนภา: WW Pump No.1,2 ปกติ / No.3 เครื่องชำรุด / EFF Pump No.2 ปกติ / No.1,3 เครื่องชำรุด
-- โรงใต้: Aerator No.3,7 ปกติ / No.1 ควบคุมชำรุด / No.2,4,5,6,8 ชำรุดถาวร / No.9-16 ไม่พบ/ชำรุด
-- Clarifier No.1,2: ชำรุด
-- หม้อแปลง 1,000 kVA: น้ำมันรั่ว
-
-=== งานซ่อมบำรุง มีนาคม 2569 ===
-เหนือ: บำรุงรักษา 54 งาน / ใต้: 42 งาน
-งานคงค้าง: 1.ปั้มระบายน้ำฝน No.1 ฐานปากแตรชำรุด 2.ปั๊มระบายน้ำฝน No.3 สายไฟพันกันร้อนเกิน Trip 10/9/68
-
-=== เรื่องติดตาม ===
-1. ชุดควบคุม Jet Aerator ทั้งสองโรง - อยู่ระหว่างจัดซื้อ (จัดส่งบางส่วนแล้ว)
-2. ชุดควบคุม Waste Water Pump No.2 โรงเหนือ - ซ่อม 4 ชุด อยู่ระหว่างทดสอบก่อนติดตั้ง
-
-=== Runhour เครื่องจักรสำคัญ โรงเหนือ (มีนาคม 2569) ===
-Jet Aerator No.2: 22,509 ชม / No.3: 9,955 ชม / No.7: 13,837 ชม
-Jet Aerator No.12: 94,424 ชม / No.14: 87,020 ชม / No.15: 99,065 ชม
-Clarifier เหนือ: 16,339 / 68,846 / 64,496 / 56,077 ชม
+- หาดวอนนภา: WW Pump No.1,2 ปกติ / EFF Pump No.2 ปกติ / No.1,3 เครื่องชำรุด
+- โรงใต้: Aerator No.3,7 ปกติ / No.2,4,5,6,8 ชำรุดถาวร / Clarifier No.1,2 ชำรุด
 """
+
+def get_knowledge():
+    return STATIC_KNOWLEDGE + FILE_DATA
 
 def verify_signature(body, signature):
     hash_val = hmac.new(LINE_CHANNEL_SECRET.encode("utf-8"), body, hashlib.sha256).digest()
@@ -72,13 +108,17 @@ def reply_message(reply_token, text):
 
 def ask_groq(user_message):
     try:
+        kb = get_knowledge()
+        # จำกัด knowledge ไม่เกิน 6000 ตัวอักษร
+        if len(kb) > 6000:
+            kb = kb[:6000] + "\n...(ข้อมูลถูกตัดบางส่วน)"
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
             json={
                 "model": "llama-3.1-8b-instant",
                 "messages": [
-                    {"role": "system", "content": f'คุณคือ "น้องแสนสุข" ผู้ช่วย AI ตอบเป็นภาษาไทย กระชับ เป็นมิตร ใช้ข้อมูล:\n{KNOWLEDGE_BASE}'},
+                    {"role": "system", "content": f'ตอบเป็นภาษาไทย กระชับ ใช้ข้อมูล:\n{kb}'},
                     {"role": "user", "content": user_message}
                 ],
                 "temperature": 0.3,
